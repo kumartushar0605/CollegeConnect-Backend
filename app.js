@@ -4,14 +4,12 @@ import { connectDB } from "./data/database.js";
 import student from "./routes/student.js";
 import teacher from "./routes/teacher.js";
 import cookieParser from "cookie-parser";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 import multer from "multer";
 import { TEAC } from "./models/teacherM.js";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import dotenv from "dotenv";
+dotenv.config();
 
 const app = express();
 connectDB();
@@ -26,35 +24,46 @@ app.use(
   })
 );
 
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, // set in .env
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Multer + Cloudinary Storage
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "teacher-images", // Optional folder in Cloudinary
+    allowed_formats: ["jpg", "jpeg", "png"],
+    public_id: (req, file) => Date.now().toString(),
+  },
+});
+const upload = multer({ storage });
+
 // Routes
 app.use(student);
 app.use(teacher);
 
-
-// Serve static files
-app.use("/uploads", express.static("uploads"));
-
-// Multer storage config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
-});
-const upload = multer({ storage });
-
 /* ============================================
-   POST: Upload Image & Link to Teacher (by email)
+   POST: Upload Image & Link to Teacher (Cloudinary)
 ============================================ */
 app.post("/upload-image/:id", upload.single("image"), async (req, res) => {
-  const { id } = req.params; // This is email
-  if (!req.file) {
+  const { id } = req.params;
+  if (!req.file || !req.file.path) {
     return res.status(400).send({ error: "No file uploaded" });
   }
 
-  const fileUrl = `https://collegeconnect-backend.onrender.com/uploads/${req.file.filename}`;
-  console.log("my image file is :"+ fileUrl)
-  console.log(id)
+  const fileUrl = req.file.path; // Cloudinary URL
+  const publicId = req.file.filename || req.file.originalname; // Use for deletion later
+
   try {
-    const updated = await TEAC.findOneAndUpdate({ email: id }, { fileUrl }, { new: true });
+    const updated = await TEAC.findOneAndUpdate(
+      { email: id },
+      { fileUrl, publicId }, // Save both in DB
+      { new: true }
+    );
 
     if (!updated) {
       return res.status(404).send({ error: "Teacher not found" });
@@ -85,29 +94,31 @@ app.get("/get-image/:id", async (req, res) => {
 });
 
 /* ============================================
-   DELETE: Delete Image from Server & DB (by email)
+   DELETE: Delete Image from Cloudinary & DB
 ============================================ */
 app.delete("/delete-image/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const teacher = await TEAC.findOne({ email: id });
 
-    if (!teacher || !teacher.fileUrl) {
+    if (!teacher || !teacher.fileUrl || !teacher.publicId) {
       return res.status(404).send({ error: "Image not found for this teacher" });
     }
 
-    const filename = path.basename(teacher.fileUrl);
-    const filePath = path.join(__dirname, "uploads", filename);
+    // Extract public_id from the URL or store separately
+    const publicId = teacher.fileUrl.split('/').pop().split('.')[0];
 
-    fs.unlink(filePath, async (err) => {
-      if (err) {
-        return res.status(500).send({ error: "Error deleting file from server" });
+    cloudinary.uploader.destroy(`teacher-images/${publicId}`, async (error, result) => {
+      if (error) {
+        console.error(error);
+        return res.status(500).send({ error: "Error deleting from Cloudinary" });
       }
 
       teacher.fileUrl = undefined;
+      teacher.publicId = undefined;
       await teacher.save();
 
-      res.send({ message: "Image deleted and DB updated" });
+      res.send({ message: "Image deleted from Cloudinary and DB updated" });
     });
   } catch (err) {
     res.status(500).send({ error: "Failed to delete image" });
