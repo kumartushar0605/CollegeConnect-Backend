@@ -46,8 +46,7 @@ const upload = multer({ storage });
 ============================================ */
 app.post("/upload-image/:id", upload.single("image"), async (req, res) => {
   const { id } = req.params; // This is email
-  const fileUrl = `http://localhost:5000/uploads/${req.file.filename}`;
-  console.log(fileUrl)
+  const fileUrl = `https://collegeconnect-backend.onrender.com/uploads/${req.file.filename}`;
   try {
     const updated = await TEAC.findOneAndUpdate({ email: id }, { fileUrl }, { new: true });
 
