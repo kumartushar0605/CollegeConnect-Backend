@@ -5,9 +5,9 @@ export const sendCookiee = (Userr,res,message,statusCode)=>{
     console.log(tokenn+"hiiiiiiiiiiiiiiiiiiiiiiiii");
     res.status(statusCode).cookie("tokenn",tokenn,{
       httpOnly:true,
-      maxAge:190*60*1000, // 15 min m cookie expire hogaye ga
-    //   sameSite:process.env.NODE_ENV==="DEVELOPMENT"?"lax":"none", //backend kisi or url pr rhe ga or fronend kisi or url pr 
-    //   secure:process.env.NODE_ENV==="DEVELOPMENT"?false:true
+      maxAge:90*60*1000, // 15 min m cookie expire hogaye ga
+   sameSite: process.env.NODE_ENV === "development" ? "lax" : "none",
+      secure: process.env.NODE_ENV !== "development", // secure:true in production (HTTPS)
     }).json({
       success:true,
       message,
