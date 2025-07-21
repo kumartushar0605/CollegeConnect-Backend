@@ -101,7 +101,7 @@ app.delete("/delete-image/:id", async (req, res) => {
   try {
     const teacher = await TEAC.findOne({ email: id });
 
-    if (!teacher || !teacher.fileUrl || !teacher.publicId) {
+    if (!teacher || !teacher.fileUrl) {
       return res.status(404).send({ error: "Image not found for this teacher" });
     }
 
